@@ -5,7 +5,7 @@
  * Time: 21:36
  */
 
-namespace Nooku\Component\Router;
+namespace Oligriffiths\Component\Router;
 
 use Nooku\Library;
 
@@ -13,10 +13,8 @@ use Nooku\Library;
  * Cache routing rule.
  * An APC cache that caches built and parsed rules
  */
-class RuleCache extends RuleDefault
+class CacheApc extends RuleDefault
 {
-    protected $_namespace = 'nooku';
-
     /**
      * @var string The cache identifier string
      */
@@ -32,7 +30,7 @@ class RuleCache extends RuleDefault
         parent::__construct($config);
 
         //Compile the cache identifier
-        $this->_cache_identifier = $this->_namespace.'-router-'.$config->cache_identifier;
+        $this->_cache_identifier = $config->cache_namespace.$config->cache_identifier;
     }
 
     /**
@@ -46,7 +44,8 @@ class RuleCache extends RuleDefault
     protected function _initialize(Library\ObjectConfig $config)
     {
         $config->append(array(
-            'cache_identifier' => 'route-rule'
+            'cache_namespace' => $this->getObject('application')->getConfig()->cache_namespace,
+            'cache_identifier' => 'routes'
         ));
 
         parent::_initialize($config);
@@ -63,21 +62,8 @@ class RuleCache extends RuleDefault
         static $routes;
 
         if(extension_loaded('apc')){
-            $query = $command->original->query;
 
-            //Ensure option and query come first, required for clean cache
-            $q = array();
-            if(isset($query['option'])){
-                $q['option'] = $query['option'];
-                unset($query['option']);
-            }
-            if(isset($query['view'])){
-                $q['view'] = $query['view'];
-                unset($query['option']);
-            }
-
-            ksort($query);
-            $query = http_build_query(array_merge($q,$query));
+            $query = $this->_buildCacheIdentifier($command->original->query);
 
             if(!isset($routes[$query])){
                 if($route = apc_fetch($this->_cache_identifier.'-build-'.$query)){
@@ -103,23 +89,29 @@ class RuleCache extends RuleDefault
         if(extension_loaded('apc')){
 
             $url = clone $command->original;
-            $query = $url->query;
-
-            //Ensure option and query come first, required for clean cache
-            $q = array();
-            if(isset($query['option'])){
-                $q['option'] = $query['option'];
-                unset($query['option']);
-            }
-            if(isset($query['view'])){
-                $q['view'] = $query['view'];
-                unset($query['option']);
-            }
-            ksort($query);
-            $query = http_build_query(array_merge($q,$query));
+            $query = $this->_buildCacheIdentifier($url->query);
 
             return apc_store($this->_cache_identifier.'-build-'.$query, $command->url->toString(Library\HttpUrl::PATH + Library\HttpUrl::FORMAT + Library\HttpUrl::QUERY));
         }
+    }
+
+
+    protected function _buildCacheIdentifier()
+    {
+        //Ensure option and query come first, required for clean cache
+        $q = array();
+        if(isset($query['component'])){
+            $q['component'] = $query['component'];
+            unset($query['component']);
+        }
+        if(isset($query['view'])){
+            $q['view'] = $query['view'];
+            unset($query['component']);
+        }
+
+        ksort($query);
+
+        return http_build_query(array_merge($q,$query));
     }
 
 
@@ -169,7 +161,7 @@ class RuleCache extends RuleDefault
 
             if($items = apc_cache_info('user')){
 
-                $query = $this->_cache_identifier.'-'.($type ? $type.'-'.http_build_query(array('option' => $command->option, 'view' => $command->view)) : '');
+                $query = $this->_cache_identifier.'-'.($type ? $type.'-'.http_build_query(array('component' => $command->component, 'view' => $command->view)) : '');
                 $length = strlen($query);
 
                 foreach($items['cache_list'] AS $item){

@@ -8,7 +8,7 @@
  * @link        http://www.nooku.org
  */
 
-namespace Nooku\Component\Router;
+namespace Oligriffiths\Component\Router;
 
 use Nooku\Library;
 

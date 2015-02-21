@@ -37,7 +37,7 @@
  * @see http://lithify.me/docs/lithium/net/http/Route
  */
 
-namespace Nooku\Component\Router;
+namespace Oligriffiths\Component\Router;
 
 use Nooku\Library;
 

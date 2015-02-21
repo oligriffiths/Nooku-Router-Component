@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<koowa-component>
+    <identifier>com:oligriffiths/router</identifier>
+    <name>router</name>
+    <version>0.0.1</version>
+</koowa-component>

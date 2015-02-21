@@ -5,7 +5,7 @@
  * Time: 21:36
  */
 
-namespace Nooku\Component\Router;
+namespace Oligriffiths\Component\Router;
 
 use Nooku\Library;
 
