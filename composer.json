@@ -1,0 +1,13 @@
+{
+    "name": "oligriffiths/nooku-router-component",
+    "description": "A routing component for the Nooku platform",
+    "type": "nooku-component",
+    "keywords": ["nooku", "routing", "component"],
+    "license": "GPL",
+    "require": {
+        "nooku/installer": "dev-develop"
+    },
+    "autoload": {
+        "files": ["autoload.php"]
+    }
+}
