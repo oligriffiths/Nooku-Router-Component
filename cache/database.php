@@ -28,13 +28,13 @@ class RuleDatabase extends RuleDefault
 		//Ensure option and query come first, required for clean cache
 		$q = array();
 
-		if(isset($query['option'])){
-			$q['option'] = $query['option'];
-			unset($query['option']);
+		if(isset($query['component'])){
+			$q['component'] = $query['component'];
+			unset($query['component']);
 		}
 		if(isset($query['view'])){
 			$q['view'] = $query['view'];
-			unset($query['option']);
+			unset($query['component']);
 		}
 		unset($query['format']);
 		unset($query['Itemid']);
@@ -85,9 +85,9 @@ class RuleDatabase extends RuleDefault
             //Ensure option and query come first, required for clean cache
             $q = array();
             $page_id = null;
-            if(isset($query['option'])){
-                $q['option'] = $query['option'];
-                unset($query['option']);
+            if(isset($query['component'])){
+                $q['component'] = $query['component'];
+                unset($query['component']);
             }
             if(isset($query['view'])){
                 $q['view'] = $query['view'];
@@ -108,7 +108,7 @@ class RuleDatabase extends RuleDefault
                 $item = $this->getObject('com://site/router.model.routes')->set($state)->getRow();
                 if($item && $item->isNew()){
                     $data = $state;
-                    $data['component'] = $data['option'];
+                    $data['component'] = $data['component'];
                     $data['route'] = $result->getPath();
                     $data['query'] = $state['query'];
 
@@ -149,7 +149,7 @@ class RuleDatabase extends RuleDefault
 			//Parse & set matching route
 			if(!$item->isNew()){
 				parse_str($item->query, $query);
-                $query['option'] = $item->component;
+                $query['component'] = $item->component;
                 $query['view'] = $item->view;
 				$context->result->query = array_merge($query, $url->query);
 				if($item->page_id && !isset($context->result->query['Itemid'])) $context->result->query['Itemid'] = $item->page_id;

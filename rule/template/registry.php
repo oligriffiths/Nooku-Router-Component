@@ -19,12 +19,6 @@ class RuleTemplateRegistry extends Library\Object
 	protected static $_templates = array();
 
 	/**
-	 * Optional scope whilst reading in routing files, sets the options param
-	 * @var
-	 */
-	protected static $_scope;
-
-	/**
 	 * if set to true, routes for components missing a router or routes.json/php files will be auto created
 	 * @see $this->loadRoutes()
 	 * @var bool
@@ -43,12 +37,6 @@ class RuleTemplateRegistry extends Library\Object
 	 */
 	protected $_cache_identifier;
 
-    /**
-     * Root path from which routes are auto loaded
-     * @var
-     */
-    protected $_component_path;
-
 
 	/**
 	 * Object constructor
@@ -58,11 +46,10 @@ class RuleTemplateRegistry extends Library\Object
 	{
 		parent::__construct($config);
 
-        $this->_cache_identifier = $config->cache_identifier;
+        //Compile the cache identifier
+        $this->_cache_identifier = $config->cache_namespace.$config->cache_identifier;
 
 		$this->_auto_create_routes = $config->auto_create;
-
-        $this->_component_path = rtrim($config->component_path,'/');
 
 		if($config->auto_load) $this->loadRoutes();
 	}
@@ -77,8 +64,8 @@ class RuleTemplateRegistry extends Library\Object
 		$config->append(array(
 			'auto_create' => true,
 			'auto_load' => true,
-            'component_path' => Library\ClassLoader::getInstance()->getLocator('component')->getNamespace(''),
-            'cache_identifier' => 'route-template'
+            'cache_namespace' => $this->getObject('application')->getConfig()->cache_namespace,
+            'cache_identifier' => 'route-templates'
 		));
 		parent::_initialize($config);
 	}
@@ -98,9 +85,6 @@ class RuleTemplateRegistry extends Library\Object
 	{
 		$params = $params instanceof Library\ObjectConfig ? $params->toArray() : $params;
 		$config = $config instanceof Library\ObjectConfig ? $config->toArray() : $config;
-
-		//Set the scope if defined
-		if(self::$_scope && !isset($params['option'])) $params['option'] = self::$_scope;
 
 		//Add starting slash
 		$rule = '/'.ltrim($rule,'/');
@@ -196,8 +180,7 @@ class RuleTemplateRegistry extends Library\Object
 		//If we have vars, return the new url
 		if(count($vars)){
 			$url->query = $vars;
-			$url->path = 'index';
-			$url->format = 'php';
+			$url->path = array();
 			return $url;
 		}
 
@@ -210,12 +193,12 @@ class RuleTemplateRegistry extends Library\Object
 	 * For example, given the following route:
 	 *
 	 * {{{
-	 * Router::connect('/login', array('option' => 'com_users', 'view' => 'login'));
+	 * Router::connect('/login', array('component' => 'com_users', 'view' => 'login'));
 	 * }}}
 	 *
 	 * This will match:
 	 * {{{
-	 * $url = Router::match(array('option' => 'com_users', 'view' => 'login'));
+	 * $url = Router::match(array('component' => 'com_users', 'view' => 'login'));
 	 * // returns /login
 	 * }}}
 	 *
@@ -306,8 +289,6 @@ class RuleTemplateRegistry extends Library\Object
 		if($match){
 			$url->path = is_array($match->path) ? array_filter($match->path) : explode('/',ltrim($match->path,'/'));
 			$url->query = $match->query + $query;
-			$url->format = isset($url->query['format']) ? $url->query['format'] : 'html';
-			unset($url->query['format']);
 			return true;
 		}else{
 			return false;
@@ -343,154 +324,216 @@ class RuleTemplateRegistry extends Library\Object
 	 * Route loader searches the components directory in all com_ folders looking for a
 	 * routes.php or routes.json to include or parse and add routes
 	 */
-	public function loadRoutes()
+	protected function loadRoutes()
 	{
 		static $loaded;
 
+        if($loaded) return;
+
 		if(extension_loaded('apc')){
-			if($routes = apc_fetch($this->_cache_identifier.'-routes')){
+			if($routes = apc_fetch($this->_cache_identifier)){
 				self::$_templates = $routes;
 				$loaded = true;
 				return;
 			}
 		}
 
-		if(!$loaded){
+        $bootstrapper   = $this->getObject('object.bootstrapper');
+        $components     = $bootstrapper->getComponents();
 
-			//Load the components
-			$components = glob($this->_component_path.'/*', GLOB_ONLYDIR);
+        //Find all components and look for routes
+        foreach($components AS $component){
+            $identifier = $this->getIdentifier($component);
+            $path       = $bootstrapper->getComponentPath($identifier->package, $identifier->domain);
 
-			//Find all components and look for routes
-			if($components){
+            $this->loadComponentRoutes($identifier, $path);
+        }
 
-				foreach($components AS $dir){
-
-					$component = basename($dir);
-
-                    //Skip core components
-                    if(in_array($component, array('application','router'))) continue;
-
-					//Skip components with a router, these are handling routing themselves
-//					if(file_exists($dir.'/router.php')) continue;
-
-                    //Ensure the component is dispatchable
-                    try{
-                        $class = $this->getObject('manager')->getClass('com:'.$component.'.dispatcher.permission.http');
-                        if(!$class || !class_exists($class)) continue;
-
-                        $dispatcher_http = new $class(new Library\ObjectConfig);
-                        if(!$dispatcher_http->canDispatch()) continue;
-                    }catch(\Exception $e){
-                        continue;
-                    }
-
-                    //Set the scope for this component
-                    self::$_scope = 'com_'.$component;
-
-                    //Check for routes php or json
-                    if($files = glob($dir.'/routes.{php,json}',GLOB_BRACE)){
-
-                        foreach($files AS $file)
-                        {
-                            if(preg_match('#\.php$#', $file)){
-
-                                //Include the router
-                                include_once $file;
-
-                            }else{
-
-                                //Read the file and process the params
-                                $content = file_get_contents($file);
-                                $json = json_decode($content, true);
-                                if($json){
-                                    foreach($json AS $route => $options)
-                                    {
-                                        //Setup options
-                                        if(!is_array($options)){
-                                            parse_str($options, $params);
-                                        }else if(isset($options['params'])){
-                                            $params = $options['params'];
-                                            unset($options['params']);
-                                        }else{
-                                            $params = $options;
-                                        }
-
-                                        //Connect the route
-                                        self::connect($route, $params, $options);
-                                    }
-                                }else{
-                                    throw \UnexpectedValueException('The file '.$file.' is not valid JSON. Ensure the file is formatted correctly (ensure you escape regex patterns)');
-                                }
-                            }
-
-                            //Reset the scope
-                            self::$_scope = null;
-                        }
-                    }else if($this->_auto_create_routes){
-
-                        /**
-                         * Register some default routes.
-                         * 1 of 2 routes are registered:
-                         *      component/views <- plural views
-                         *      component/view/id <- singular views
-                         **/
-                        $views = glob($dir.'/view/*', GLOB_ONLYDIR);
-
-                        if(count($views)){
-
-                            //Connect the base component route
-                            $this->connect($component);
-
-                            //Connect views
-                            foreach($views AS &$view_path){
-                                $view = basename($view_path);
-                                $singular = Library\StringInflector::isSingular($view);
-
-                                if($view == $component){
-                                    $this->connect($component, array('view' => $view));
-                                }else{
-                                    if($singular){
-                                        $this->connect($component.'/'.$view.'/{:id:\d*}', array('view' => $view, 'id' => null));
-                                    }else{
-                                        $this->connect($component.'/'.$view, array('view' => $view));
-                                    }
-                                }
-
-                                $layouts = glob($view_path.'/templates/*.php');
-                                foreach($layouts AS $layout){
-                                    $layout = explode('.',substr(basename($layout), 0, -4));
-
-                                    //Layouts must have a format
-                                    if(count($layout) < 2) continue;
-
-                                    $format = array_pop($layout);
-                                    $layout = implode('.', $layout);
-
-                                    //Ignore partials and default
-                                    if($layout != 'default' && !preg_match('#^_#',$layout) && !preg_match('#^default_#',$layout) && !preg_match('#^form_#',$layout)){
-
-                                        if($singular){
-                                            $this->connect($component.'/'.$view.'/{:id:\d+}/'.$layout, array('view' => $view, 'layout' => $layout));
-                                            $this->connect($component.'/'.$view.'/'.$layout, array('view' => $view, 'layout' => $layout));
-                                        }else{
-                                            $this->connect($component.'/'.$view.'/'.$layout, array('view' => $view, 'layout' => $layout));
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-				}
-
-                //Clear scope
-                self::$_scope = null;
-
-				if(extension_loaded('apc')){
-					apc_store($this->_cache_identifier.'-routes', self::$_templates);
-				}
-			}
-		}
-
-		return $this;
+        if(extension_loaded('apc')){
+            apc_store($this->_cache_identifier, self::$_templates);
+        }
 	}
+
+
+    /**
+     * Loads the routes for a specific component
+     *
+     * @param Library\ObjectIdentifier $identifier
+     * @param $path
+     * @throws
+     */
+    protected function loadComponentRoutes(Library\ObjectIdentifier $identifier, $path)
+    {
+        $component = $identifier->package;
+
+        //Skip core components
+        if(in_array($component, array('application','router'))) return;
+
+        //If a router already exists, skip
+        if(file_exists($path.'/router.php')) return;
+
+        //Ensure the component is dispatchable
+        try{
+            $dispatcher_identifier = $identifier->toArray();
+            $dispatcher_identifier['path'] = array('dispatcher','permission');
+            $dispatcher_identifier['name'] = 'http';
+
+            //DispatcherPermissionAbstract does not implement ObjectInterface, so we instantiate manually
+            $class = $this->getObject('manager')->getClass($dispatcher_identifier);
+            if(!$class || $class == 'Nooku\Library\DispatcherPermissionDefault' || !class_exists($class)) return;
+
+            //Instantiate dispatcher
+            $dispatcher_http = new $class(new Library\ObjectConfig);
+            if(!$dispatcher_http->canDispatch()) return;
+        }catch(\Exception $e){
+            return;
+        }
+
+        //Check for routes php or json
+        if($files = glob($path.'/routes.{php,json}',GLOB_BRACE)){
+
+            foreach($files AS $file)
+            {
+                if(preg_match('#\.php$#', $file)){
+
+                    //Include the router
+                    include_once $file;
+
+                }else{
+
+                    //Read the file and process the params
+                    $content = file_get_contents($file);
+                    $json = json_decode($content, true);
+                    if($json){
+                        foreach($json AS $route => $options)
+                        {
+                            //Setup options
+                            if(!is_array($options)){
+                                parse_str($options, $params);
+                            }else if(isset($options['params'])){
+                                $params = $options['params'];
+                                unset($options['params']);
+                            }else{
+                                $params = $options;
+                            }
+
+                            $params['component'] = $component;
+
+                            //Connect the route
+                            self::connect($route, $params, $options);
+                        }
+                    }else{
+                        throw \UnexpectedValueException('The file '.$file.' is not valid JSON. Ensure the file is formatted correctly (ensure you escape regex patterns)');
+                    }
+                }
+            }
+        }else if($this->_auto_create_routes){
+
+            /**
+             * Register some default routes.
+             * 1 of 2+ routes are registered:
+             *      component/views <- plural views
+             *      component/view/id <- singular views
+             *
+             * Model states are used to generate the component/view/X routes
+             **/
+            $views = glob($path.'/view/*', GLOB_ONLYDIR);
+            if(empty($views)) return;
+
+            //Connect the base component route
+            $this->connect($component);
+
+            //Connect views
+            foreach($views AS &$view_path){
+                $view       = basename($view_path);
+                $singular   = Library\StringInflector::isSingular($view);
+                $states     = $singular ? $this->getComponentViewStates($identifier, $view) : array();
+
+                //If view is the name of component, just add /component
+                if($view == $component){
+                    $this->connect($component, array('component' => $component, 'view' => $view));
+                }else{
+                    //Singular views have identifiers
+                    if($singular){
+                        foreach($states AS $name => $regex){
+                            $this->connect($component.'/'.$view.'/{:'.$name.':'.$regex.'}', array('component' => $component, 'view' => $view, $name => null));
+                        }
+                    }else{
+                        $this->connect($component.'/'.$view, array('component' => $component, 'view' => $view));
+                    }
+                }
+
+                $layouts = glob($view_path.'/templates/*.php');
+                foreach($layouts AS $layout){
+                    $layout = explode('.',substr(basename($layout), 0, -4));
+
+                    //Layouts must have a format
+                    if(count($layout) < 2) continue;
+
+                    array_pop($layout);
+                    $layout = implode('.', $layout);
+
+                    //Ignore partials and default
+                    if($layout != 'default' && !preg_match('#^_#',$layout) && !preg_match('#^default_#',$layout) && !preg_match('#^form_#',$layout)){
+
+                        if($singular){
+                            foreach($states AS $name => $regex){
+                                $this->connect($component.'/'.$view.'/{:'.$name.':'.$regex.'}/'.$layout, array('component' => $component, 'view' => $view, $name => null, 'layout' => $layout));
+                            }
+                            $this->connect($component.'/'.$view.'/'.$layout, array('component' => $component, 'view' => $view, 'layout' => $layout));
+                        }else{
+                            $this->connect($component.'/'.$view.'/'.$layout, array('component' => $component, 'view' => $view, 'layout' => $layout));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Returns the states for a particular view as an array of state name => regex
+     *
+     * @param Library\ObjectIdentifier $identifier
+     * @param $view
+     * @return array
+     */
+    protected function getComponentViewStates(Library\ObjectIdentifier $identifier, $view)
+    {
+        $states = array();
+
+        $model = $identifier->toArray();
+        $model['path'] = array('model');
+        $model['name'] = Library\StringInflector::pluralize($view);
+
+        try{
+            $model = $this->getObject($model);
+        }catch(\Exception $e){
+            return array();
+        }
+
+        $state = $model->getState();
+        foreach($state AS $value){
+
+            if(!$value->unique) continue;
+
+            switch($value->filter){
+                case 'word':
+                    $regex = '[A-Za-z_]+';
+                    break;
+
+                case 'int':
+                    $regex = '\d+';
+                    break;
+
+                default:
+                    $regex = '[A-Za-z0-9.\-_]+';
+                    break;
+            }
+
+            //Can't have multiple of the same state type for a route
+            if(!in_array($regex, $states)) $states[$value->name] = $regex;
+        }
+
+        return $states;
+    }
 }

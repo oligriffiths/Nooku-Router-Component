@@ -67,9 +67,8 @@ class RuleTemplate extends RuleDefault
 	{
         $url = clone $context->url;
 		if($this->_registry->match($url)){
-            $context->url->path = array_merge($url->path, $context->url->path);
-            $context->url->query = $url->query;
-            $context->url->format = $url->format;
+            $context->result->path = array_merge($url->path, $context->url->path);
+            $context->result->query = $url->query;
             return true;
         }
 	}
@@ -85,10 +84,9 @@ class RuleTemplate extends RuleDefault
 		//Check if a static route is defined for this url
 		if($parsed_url = $this->_registry->parse($context->url))
 		{
-			if(isset($parsed_url->query['option'])){
-				$context->url->query     = $context->url->query + $parsed_url->query;
-                $context->url->path      = $parsed_url->path;
-                $context->url->format    = $parsed_url->format;
+			if(isset($parsed_url->query['component'])){
+				$context->result->query = array_merge($context->url->query, $parsed_url->query);
+                $context->result->path  = $parsed_url->path;
 				return true;
 			}
 		}

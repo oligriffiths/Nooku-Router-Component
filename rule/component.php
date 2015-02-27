@@ -22,29 +22,22 @@ class RuleComponent extends RulePage
      */
     protected function _buildRoute(Library\CommandInterface $command)
 	{
-		$url = clone $command->url;
         $success = null;
 
 		// Use the custom routing handler if it exists
-		if (isset($url->query['option']))
+		if (isset($command->url->query['component']))
 		{
 			//Get the router identifier
-			$identifier = 'com:'.substr($url->query['option'], 4).'.router';
+			$identifier = 'com:'.$command->url->query['component'].'.router';
 
 			try{
 				//Build the view route
 				$router = $this->getObject($identifier, array('router' => $this));
+                $segments = $router->build($command->url);
 
-				if(false !== $segments = $router->build($url, $command->original)){
+				if(is_array($segments) && count($segments)){
 
-                    if(is_array($segments) && count($segments)){
-                        $command->url->path = array_merge($segments, $command->url->path);
-                    }
-
-                    if(method_exists($router, 'canCache')){
-                        $command->cache = $router->canCache($command);
-                    }
-
+                    $command->result->path = array_merge($segments, $command->result->getPath(true));
                     $success = true;
 				}
 			}catch(\Exception $e){}
@@ -57,7 +50,7 @@ class RuleComponent extends RulePage
 
 
     /**
-     * Parse route via the page rule first as there is no other way to determine 'option' at this point.
+     * Parse route via the page rule first as there is no other way to determine 'component' at this point.
      * If option is defined, parse via the component router
      * @param Library\CommandInterface $command
      * @return bool
@@ -66,19 +59,19 @@ class RuleComponent extends RulePage
 	{
         parent::_parseRoute($command);
 
-        $route = $command->url->path;
+        $route = $command->result->path;
 
-        if(isset($command->url->query['option']) && !empty($route))
+        if(isset($command->result->query['component']) && !empty($route))
         {
             try{
                 //Get the router identifier
-                $identifier = 'com:'.substr($command->url->query['option'], 4).'.router';
+                $identifier = 'com:'.$command->result->query['component'].'.router';
 
                 //Parse the view route
-                $vars = $this->getObject($identifier)->parse($command->url);
+                $vars = $this->getObject($identifier)->parse($command->result);
 
                 //Merge default and vars
-                $command->url->query = array_merge($command->url->query, $vars);
+                $command->result->query = array_merge($command->result->query, $vars);
 
                 return true;
 

@@ -38,13 +38,13 @@ class RulePage extends RuleDefault
             if($page = $this->getObject('application.pages')->getPage($url->query['Itemid'])){
 
                 $link = $page->getLink();
-                if($link && isset($link->query['option']) && $link->query['option'] == $url->query['option']) {
+                if($link && isset($link->query['component']) && $link->query['component'] == $url->query['component']) {
 
                     $route = explode('/',$page->route);
-                    $context->url->path = $page->home ? $context->url->path : array_merge($route, $context->url->path);
-                    $context->url->query = array_diff_key($context->url->query, $link->query);
+                    $context->result->path = $page->home ? $context->result->path : array_merge($route, $context->result->path);
+                    $context->result->query = array_diff_key($context->result->query, $link->query);
 
-                    unset($context->url->query['Itemid']);
+                    unset($context->result->query['Itemid']);
                 }
             }
         }
@@ -87,10 +87,23 @@ class RulePage extends RuleDefault
         //Set the page information in the route
         if($page && $page->type != 'redirect')
         {
-            if($link = $page->getLink()) $context->url->setQuery($link->query, true);
-            $url->query['Itemid'] = $page->id;
+            if($link = $page->getLink()) $context->result->setQuery($link->query, true);
+            $context->result->query['Itemid'] = $page->id;
         }
 
         $pages->setActive($page->id);
+    }
+
+    /**
+     * After parsing, if Itemid is set, set the active page
+     *
+     * @param Library\CommandInterface $context
+     */
+    protected function _afterParse(Library\CommandInterface $context)
+    {
+        if(isset($context->result->query['Itemid'])){
+            $pages      = $this->getObject('application.pages');
+            $pages->setActive($context->result->query['Itemid']);
+        }
     }
 }

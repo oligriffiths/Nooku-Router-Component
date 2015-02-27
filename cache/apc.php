@@ -13,7 +13,7 @@ use Nooku\Library;
  * Cache routing rule.
  * An APC cache that caches built and parsed rules
  */
-class CacheApc extends RuleDefault
+class CacheApc extends CacheDefault
 {
     /**
      * @var string The cache identifier string
@@ -51,104 +51,68 @@ class CacheApc extends RuleDefault
         parent::_initialize($config);
     }
 
-
     /**
      * Route build pre-processor. Stops execution if route is found in cache
      * @param Library\CommandInterface $command
      * @return bool
      */
-    protected function _beforeBuild(Library\CommandInterface $command)
+    protected function _fetchBuild(Library\CommandInterface $command)
     {
-        static $routes;
-
         if(extension_loaded('apc')){
 
-            $query = $this->_buildCacheIdentifier($command->original->query);
+            $query = $this->_buildQuerystringIdentifier($command->url->query);
 
-            if(!isset($routes[$query])){
-                if($route = apc_fetch($this->_cache_identifier.'-build-'.$query)){
-                    $routes[$query] = $this->getObject('lib:http.url', array('url' => $route));
-                }
-            }
-
-            if(isset($routes[$query])){
-                $command->url = clone $routes[$query];
+            if($route = apc_fetch($this->_cache_identifier.'-build-'.$query)){
+                $command->result = $this->getObject('lib:http.url', array('url' => $route));
                 return true;
             }
         }
     }
-
 
     /**
      * Route build post-processor, store the route to the cache
      * @param Library\CommandInterface $command
      * @return bool
      */
-    protected function _afterBuild(Library\CommandInterface $command)
+    protected function _storeBuild(Library\CommandInterface $command)
     {
         if(extension_loaded('apc')){
 
-            $url = clone $command->original;
-            $query = $this->_buildCacheIdentifier($url->query);
+            $query = $this->_buildQuerystringIdentifier($command->url->query);
 
-            return apc_store($this->_cache_identifier.'-build-'.$query, $command->url->toString(Library\HttpUrl::PATH + Library\HttpUrl::FORMAT + Library\HttpUrl::QUERY));
+            apc_store($this->_cache_identifier.'-build-'.$query, $command->result->toString(Library\HttpUrl::PATH + Library\HttpUrl::QUERY));
         }
     }
-
-
-    protected function _buildCacheIdentifier()
-    {
-        //Ensure option and query come first, required for clean cache
-        $q = array();
-        if(isset($query['component'])){
-            $q['component'] = $query['component'];
-            unset($query['component']);
-        }
-        if(isset($query['view'])){
-            $q['view'] = $query['view'];
-            unset($query['component']);
-        }
-
-        ksort($query);
-
-        return http_build_query(array_merge($q,$query));
-    }
-
 
     /**
      * Route parse pre-processor, stops execution if round found in cache
      * @param Library\CommandInterface $command
      * @return bool
      */
-    protected function _beforeParse(Library\CommandInterface $command)
+    protected function _fetchParse(Library\CommandInterface $command)
 	{
         if(extension_loaded('apc')){
-            $route = $command->original->toString(Library\HttpUrl::PATH + Library\HttpUrl::FORMAT);
+            $route = $command->url->toString(Library\HttpUrl::PATH);
 
             if($query = apc_fetch($this->_cache_identifier.'-parse-'.$route)){
-                if(!isset($query['format'])) $query['format'] = $command->url->format ? $command->url->format : 'html';
-                $command->url->query = $query;
-                $command->url->path = 'index';
-                $command->url->format = 'php';
+                $command->result->query = $query;
+                $command->result->path = 'index.php';
                 return true;
             }
         }
 	}
-
 
     /**
      * Route parse post-processor, stores route to cache
      * @param Library\CommandInterface $command
      * @return bool
      */
-    protected function _afterParse(Library\CommandInterface $command)
+    protected function _storeParse(Library\CommandInterface $command)
     {
         if(extension_loaded('apc')){
-            $url = clone $command->original;
-            apc_store($this->_cache_identifier.'-parse-'.$url->toString(Library\HttpUrl::PATH + Library\HttpUrl::FORMAT), $command->url->query);
+            apc_store($this->_cache_identifier.'-parse-'.$command->url->toString(Library\HttpUrl::PATH), $command->result->query);
         }
     }
-
 
     /**
      * Cleans the APC cache

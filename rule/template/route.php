@@ -235,8 +235,7 @@ class RuleTemplateRoute
 
 		$result = array_intersect_key($match, $this->_keys) + $this->_params + $this->_defaults;
 
-		$request->path = 'index';
-		$request->format = 'php';
+		$request->path = array();
 		$request->query = (array) $request->query + $result; //Merge the request query into the result
 
 		if ($this->_handler) {
