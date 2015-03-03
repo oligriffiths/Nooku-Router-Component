@@ -13,54 +13,50 @@ use Nooku\Library;
  * Database routing rule
  * Looks for routes in a database table and stores routes to the database if a cache flag is set in the context
  */
-class RuleDatabase extends RuleDefault
+class CacheDatabase extends CacheDefault
 {
+    protected $_routes = array();
+
     /**
-     * Builds a route from the database #__router_routes table. If match found, match is used and execution stops
-     * @param Library\CommandContext $context
+     * Builds a route from the database router_routes table. If match found, match is used and execution stops
+     *
+     * @param Library\CommandInterface $context
      * @return bool
      */
-    protected function _routerBuild(Library\CommandContext $context)
+    protected function _fetchBuild(Library\CommandInterface $context)
 	{
 		$url = $context->url;
 		$query = $url->query;
 
-		//Ensure option and query come first, required for clean cache
-		$q = array();
+        //Ensure option and query come first, required for clean cache
+		$querystring = $this->_buildQuerystringIdentifier($query);
 
-		if(isset($query['component'])){
-			$q['component'] = $query['component'];
-			unset($query['component']);
-		}
-		if(isset($query['view'])){
-			$q['view'] = $query['view'];
-			unset($query['component']);
-		}
-		unset($query['format']);
-		unset($query['Itemid']);
+		if(!isset($this->_routes[$querystring])){
 
-		ksort($query);
-		$querystring = http_build_query($q).'&'.http_build_query($query);
+            $states = array();
+            if(isset($query['component'])) $states['component'] = $query['component'];
+            if(isset($query['view'])) $states['view'] = $query['view'];
+            if(isset($query['layout']) && $query['layout'] == 'default') unset($query['layout']);
+            unset($query['component']);
+            unset($query['view']);
+            unset($query['format']);
+            unset($query['Itemid']);
 
-		if(!isset($routes[$querystring])){
-			$routes[$querystring] = false;
-            $state = $q;
-            $state['query'] = http_build_query($query);
+            $routes[$querystring] = false;
+            $states['query'] = http_build_query($query);
 
-            try{
-                if($route = $this->getObject('com://site/router.model.routes')->set($state)->getRow()){
-                    if(!$route->isNew()){
-                        $tmp = $this->getObject('lib://nooku/http.url', array('url' => ltrim($route->route,'/').'?'.$route->query));
-                        if($route->page_id) $tmp->query['Itemid'] = $route->page_id;
-                        $routes[$querystring] = $tmp;
-                    }
-                }
-            }catch(\Exception $e){
+            $identifier = $this->getIdentifier()->toArray();
+            $identifier['path'] = array('model');
+            $identifier['name'] = 'routes';
 
-            }
+            $model = $this->getObject($identifier);
+            $route = $model->setState($states)->fetch();
+
+            $this->_routes[$querystring] = $this->getObject('lib:http.url', array('url' => ltrim($route->route,'/').'?'.$route->query));
+            if($route->page_id) $this->_routes[$querystring]->query['Itemid'] = $route->page_id;
 		}
 
-		if($route = $routes[$querystring]){
+		if($route = $this->_routes[$querystring]){
 
 			//Remove the querystring parts from the route
 			$context->result->path = $route->path;
@@ -73,9 +69,9 @@ class RuleDatabase extends RuleDefault
 
     /**
      * Build route post-processor, stores a route to the database if the context is set to be cached
-     * @param Library\CommandContext $context
+     * @param Library\CommandInterface $context
      */
-    protected function _routerAfterBuild(Library\CommandContext $context)
+    protected function _routerAfterBuild(Library\CommandInterface $context)
     {
         if($context->cache){
             $url = clone $context->url;
@@ -125,10 +121,10 @@ class RuleDatabase extends RuleDefault
 
     /**
      * Parse a route and from the database #__router_routes table, if match found, use and stop execution
-     * @param Library\CommandContext $context
+     * @param Library\CommandInterface $context
      * @return bool
      */
-    protected function _routerParse(Library\CommandContext $context)
+    protected function _routerParse(Library\CommandInterface $context)
 	{
 		$url = $context->url;
 		try{

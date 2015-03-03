@@ -390,40 +390,30 @@ class RuleTemplateRegistry extends Library\Object
         }
 
         //Check for routes php or json
-        if($files = glob($path.'/routes.{php,json}',GLOB_BRACE)){
+        if($files = glob($path.'/routes.php',GLOB_BRACE)){
 
             foreach($files AS $file)
             {
-                if(preg_match('#\.php$#', $file)){
+                $routes = include_once $file;
 
-                    //Include the router
-                    include_once $file;
-
-                }else{
-
-                    //Read the file and process the params
-                    $content = file_get_contents($file);
-                    $json = json_decode($content, true);
-                    if($json){
-                        foreach($json AS $route => $options)
-                        {
-                            //Setup options
-                            if(!is_array($options)){
-                                parse_str($options, $params);
-                            }else if(isset($options['params'])){
-                                $params = $options['params'];
-                                unset($options['params']);
-                            }else{
-                                $params = $options;
-                            }
-
-                            $params['component'] = $component;
-
-                            //Connect the route
-                            self::connect($route, $params, $options);
+                if($routes){
+                    foreach($routes AS $route => $options)
+                    {
+                        //Setup options
+                        if(!is_array($options)){
+                            parse_str($options, $params);
+                            $options = array();
+                        }else if(isset($options['params'])){
+                            $params = $options['params'];
+                            unset($options['params']);
+                        }else{
+                            $params = $options;
                         }
-                    }else{
-                        throw \UnexpectedValueException('The file '.$file.' is not valid JSON. Ensure the file is formatted correctly (ensure you escape regex patterns)');
+
+                        $params['component'] = $component;
+
+                        //Connect the route
+                        self::connect($route, $params, $options);
                     }
                 }
             }

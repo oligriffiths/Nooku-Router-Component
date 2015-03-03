@@ -61,6 +61,7 @@ class DispatcherRouter extends Library\DispatcherRouter
             'caches' => array(
                 'memory' => array('priority' => Library\CommandHandlerInterface::PRIORITY_HIGH),
                 'apc' => array('priority' => Library\CommandHandlerInterface::PRIORITY_NORMAL),
+//                'database' => array('priority' => Library\CommandHandlerInterface::PRIORITY_HIGHEST),
             ),
             'rules' => array(
                 'component' => array('priority' => Library\CommandHandlerInterface::PRIORITY_NORMAL),
