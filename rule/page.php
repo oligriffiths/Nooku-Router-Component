@@ -101,9 +101,9 @@ class RulePage extends RuleDefault
      */
     protected function _afterParse(Library\CommandInterface $context)
     {
-        if(isset($context->result->query['Itemid'])){
-            $pages      = $this->getObject('application.pages');
-            $pages->setActive($context->result->query['Itemid']);
-        }
+        $pages      = $this->getObject('application.pages');
+        $page_id    = isset($context->result->query['Itemid']) ? $context->result->query['Itemid'] : $pages->getHome()->id;
+
+        $pages->setActive($page_id);
     }
 }
