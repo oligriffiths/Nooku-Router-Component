@@ -123,7 +123,7 @@ class DispatcherRouter extends Library\DispatcherRouter
         //Temp: Remove extension from path
         $path = $command->url->getPath();
         $extension = pathinfo($path, PATHINFO_EXTENSION);
-        $command->url->path = substr($path, 0, $path - strlen($extension) - 1);
+        if($extension) $command->url->path = substr($path, 0, $path - strlen($extension) - 1);
 
         $command->result = clone $command->url;
 
