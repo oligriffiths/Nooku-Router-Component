@@ -330,7 +330,7 @@ class RuleTemplateRegistry extends Library\Object
 
         if($loaded) return;
 
-		if(extension_loaded('apc')){
+		if(extension_loaded('apc') && 0){
 			if($routes = apc_fetch($this->_cache_identifier)){
 				self::$_templates = $routes;
 				$loaded = true;
@@ -372,23 +372,6 @@ class RuleTemplateRegistry extends Library\Object
         //If a router already exists, skip
         if(file_exists($path.'/router.php')) return;
 
-        //Ensure the component is dispatchable
-        try{
-            $dispatcher_identifier = $identifier->toArray();
-            $dispatcher_identifier['path'] = array('dispatcher','permission');
-            $dispatcher_identifier['name'] = 'http';
-
-            //DispatcherPermissionAbstract does not implement ObjectInterface, so we instantiate manually
-            $class = $this->getObject('manager')->getClass($dispatcher_identifier);
-            if(!$class || $class == 'Nooku\Library\DispatcherPermissionDefault' || !class_exists($class)) return;
-
-            //Instantiate dispatcher
-            $dispatcher_http = new $class(new Library\ObjectConfig);
-            if(!$dispatcher_http->canDispatch()) return;
-        }catch(\Exception $e){
-            return;
-        }
-
         //Check for routes php or json
         if($files = glob($path.'/routes.php',GLOB_BRACE)){
 
@@ -410,7 +393,8 @@ class RuleTemplateRegistry extends Library\Object
                             $params = $options;
                         }
 
-                        $params['component'] = $component;
+                        //Set the component by default
+                        if(!isset($params['component'])) $params['component'] = $component;
 
                         //Connect the route
                         self::connect($route, $params, $options);
@@ -418,6 +402,9 @@ class RuleTemplateRegistry extends Library\Object
                 }
             }
         }else if($this->_auto_create_routes){
+
+            //Ensure component is dispatchable
+            if(!$this->isComponentDispatchable($identifier)) return;
 
             /**
              * Register some default routes.
@@ -479,6 +466,33 @@ class RuleTemplateRegistry extends Library\Object
             }
         }
     }
+
+    /**
+     * Determines if a component is dispatchable by instantiating the dispatcher and calling canDispatch()
+     *
+     * @param Library\ObjectIdentifierInterface $identifier
+     * @return bool
+     */
+    protected function isComponentDispatchable(Library\ObjectIdentifierInterface $identifier)
+    {
+        //Ensure the component is dispatchable
+        try{
+            $dispatcher_identifier = $identifier->toArray();
+            $dispatcher_identifier['path'] = array('dispatcher','permission');
+            $dispatcher_identifier['name'] = 'http';
+
+            //DispatcherPermissionAbstract does not implement ObjectInterface, so we instantiate manually
+            $class = $this->getObject('manager')->getClass($dispatcher_identifier);
+            if(!$class || $class == 'Nooku\Library\DispatcherPermissionDefault' || !class_exists($class)) return;
+
+            //Instantiate dispatcher
+            $dispatcher_http = new $class(new Library\ObjectConfig);
+            return $dispatcher_http->canDispatch();
+        }catch(\Exception $e){
+            return false;
+        }
+    }
+
 
     /**
      * Returns the states for a particular view as an array of state name => regex
