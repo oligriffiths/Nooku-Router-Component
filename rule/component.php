@@ -33,7 +33,7 @@ class RuleComponent extends RulePage
 			try{
 				//Build the view route
 				$router = $this->getObject($identifier, array('router' => $this));
-                $segments = $router->build($command->url);
+                $segments = $router->build($command->result);
 
 				if(is_array($segments) && count($segments)){
 
