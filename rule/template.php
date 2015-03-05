@@ -82,7 +82,10 @@ class RuleTemplate extends RuleDefault
     protected function _parseRoute(Library\CommandInterface $context)
 	{
 		//Check if a static route is defined for this url
-		if($parsed_url = $this->_registry->parse($context->url))
+        $url = clone $context->url;
+        $url->path = '/'.$url->getPath();
+
+		if($parsed_url = $this->_registry->parse($url))
 		{
 			if(isset($parsed_url->query['component'])){
 				$context->result->query = array_merge($context->url->query, $parsed_url->query);
