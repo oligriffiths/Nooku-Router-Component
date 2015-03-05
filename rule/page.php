@@ -58,7 +58,7 @@ class RulePage extends RuleDefault
      */
     protected function _parseRoute(Library\CommandInterface $context)
     {
-        $url        = clone $context->url;
+        $url        = $context->result;
         $route      = $url->getPath();
         $pages      = $this->getObject('application.pages');
         $reverse    = array_reverse($pages->toArray());
@@ -104,6 +104,8 @@ class RulePage extends RuleDefault
         $pages      = $this->getObject('application.pages');
         $page_id    = isset($context->result->query['Itemid']) ? $context->result->query['Itemid'] : $pages->getHome()->id;
 
+        //Set active page
+        $context->result->query['Itemid'] = $page_id;
         $pages->setActive($page_id);
     }
 }
