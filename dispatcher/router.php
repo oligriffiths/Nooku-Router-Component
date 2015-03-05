@@ -60,7 +60,7 @@ class DispatcherRouter extends Library\DispatcherRouter
             'basepath' => null,
             'caches' => array(
                 'memory' => array('priority' => Library\CommandHandlerInterface::PRIORITY_HIGH),
-                'apc' => array('priority' => Library\CommandHandlerInterface::PRIORITY_NORMAL),
+//                'apc' => array('priority' => Library\CommandHandlerInterface::PRIORITY_NORMAL),
 //                'database' => array('priority' => Library\CommandHandlerInterface::PRIORITY_HIGHEST),
             ),
             'rules' => array(
@@ -123,7 +123,14 @@ class DispatcherRouter extends Library\DispatcherRouter
         //Temp: Remove extension from path
         $path = $command->url->getPath();
         $extension = pathinfo($path, PATHINFO_EXTENSION);
-        if($extension) $command->url->path = substr($path, 0, $path - strlen($extension) - 1);
+        $extensions = array(
+            'html','txt','js','css','json','xml','rdf','atom','rss','stream','pdf','jpg','jpeg','gif','tiff','png','bmp'
+        );
+
+        if($extension && in_array($extension, $extensions)){
+            $command->url->path = substr($path, 0, $path - strlen($extension) - 1);
+            $command->url->query['format'] = $extension;
+        }
 
         $command->result = clone $command->url;
 
@@ -133,22 +140,23 @@ class DispatcherRouter extends Library\DispatcherRouter
             $this->_rule_chain->execute('before.parse', $command);
 
             // Get the path
-            $path = trim($url->getPath(), '/');
+            $path = trim($command->url->getPath(), '/');
 
             //Remove base path
             $path = substr_replace($path, '', 0, strlen($this->getObject('request')->getBaseUrl()->getPath()));
 
             //Find the site
-            $url->query['site']  = $this->getObject('application')->getSite();
+            $command->url->query['site']  = $this->getObject('application')->getSite();
 
-            $route = str_replace($url->query['site'], '', $path);
-            $url->path = ltrim($route, '/');
+            $route = str_replace($command->url->query['site'], '', $path);
+            $command->url->path = ltrim($route, '/');
 
             //Remove base path
             $path = substr_replace($path, '', 0, strlen($this->getConfig()->basepath));
 
             //Set the route
-            $command->result->path = trim($path , '/');
+            $command->url->path = trim($path , '/');
+            $command->result = clone $command->url;
 
             //Run the parse chain
             $this->_rule_chain->execute('parse.route', $command);
@@ -212,6 +220,14 @@ class DispatcherRouter extends Library\DispatcherRouter
 
         //Run after build
         $this->_rule_chain->execute('after.build', $command);
+
+        //Set the format in the path
+        if(isset($command->result->query['format'])){
+            $path = $command->result->path;
+            if(count($path)) $path[count($path)-1] = $path[count($path)-1].'.'.$command->result->query['format'];
+
+            unset($command->result->query['format']);
+        }
 
         //Set the url
         $url->path = $command->result->path;
